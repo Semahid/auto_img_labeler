@@ -20,6 +20,7 @@ import json
 
 from src.ui.img_label import ImageLabel
 from src.ui.anotation_manager import AnnotationManager
+from src.ui.rectangle_handler import RectangleHandler, ImageInfo
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -124,6 +125,12 @@ class MainWindow(QMainWindow):
 
         # Annotation yöneticisini oluştur
         self.annotation_manager = AnnotationManager()
+
+        # Dikdörtgen işleyicisini oluştur
+        self.rectangle_handler = RectangleHandler(self.annotation_manager)
+        
+        # Resim bilgisi nesnesi
+        self.image_info = ImageInfo()
         
         # Sınıf yönetimi için değişkenler
         self.class_names = ["default"]  # En az bir sınıf olmalı
@@ -359,11 +366,14 @@ class MainWindow(QMainWindow):
             offset_x = (label_width - scaled_width) // 2
             offset_y = (label_height - scaled_height) // 2
 
-            # Bu offset değerlerini ImageLabel sınıfına bildir
+            # Bu değerleri ImageInfo'ya kaydet
+            self.image_info.update(
+                orig_width, orig_height, scaled_width, scaled_height, offset_x, offset_y
+            )
+            
+            # ImageLabel'a da bildir (geriye uyumluluk için)
             self.image_label.offset_x = offset_x
             self.image_label.offset_y = offset_y
-
-            # Orijinal ve ölçeklenmiş boyutları da kaydet
             self.image_label.orig_width = orig_width
             self.image_label.orig_height = orig_height
             self.image_label.scaled_width = scaled_width
@@ -379,31 +389,17 @@ class MainWindow(QMainWindow):
 
             # Mevcut resmin dikdörtgenlerini göster
             self.image_label.clearRectangles()
-            annotations = self.annotation_manager.get_annotations(current_image)
-            print(f"Yüklenen etiket sayısı: {len(annotations)}")
             
-            for annotation in annotations:
-                if len(annotation) == 5:  # x, y, w, h, class_id
-                    orig_x, orig_y, orig_w, orig_h, class_id = annotation
-                else:  # Eski format, sınıfsız
-                    orig_x, orig_y, orig_w, orig_h = annotation
-                    class_id = 0  # Varsayılan sınıf
-                
-                # Orijinal koordinatları gösterilen resim boyutlarına ölçekle
-                # Orijinal koordinatlar -> Ölçeklenmiş koordinatlar
-                scale_x = scaled_width / orig_width
-                scale_y = scaled_height / orig_height
-                
-                # Önemli: Offset'i ekle
-                x = int(orig_x * scale_x) + offset_x
-                y = int(orig_y * scale_y) + offset_y
-                w = int(orig_w * scale_x)
-                h = int(orig_h * scale_y)
-                
-                rect = QRect(x, y, w, h)
+            # RectangleHandler'ı kullanarak dikdörtgenleri al
+            display_rects, class_ids = self.rectangle_handler.get_rectangles_for_display(
+                current_image, self.image_info
+            )
+            
+            # Dikdörtgenleri ImageLabel'a ekle
+            for i, rect in enumerate(display_rects):
                 self.image_label.rectangles.append(rect)
-                self.image_label.rectangle_classes.append(class_id)
-                print(f"Etiket eklendi: x={x}, y={y}, w={w}, h={h}, class_id={class_id}")
+                self.image_label.rectangle_classes.append(class_ids[i])
+                print(f"Etiket eklendi: {rect}, class_id={class_ids[i]}")
 
             # Başlığa dosya adını ekleyelim
             self.setWindowTitle(f"Image Viewer - {os.path.basename(current_image)}")
@@ -427,91 +423,28 @@ class MainWindow(QMainWindow):
         """Geçerli resme çizilen dikdörtgeni annotations sözlüğüne ekler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-
-            # Görüntülenen dikdörtgenin gerçek koordinatlarını al
-            # QLabel içindeki offseti çıkar
-            display_x = rect.x() - self.image_label.offset_x
-            display_y = rect.y() - self.image_label.offset_y
-            display_w = rect.width()
-            display_h = rect.height()
-
-            # Ölçekleme oranları
-            scale_x = self.image_label.orig_width / self.image_label.scaled_width
-            scale_y = self.image_label.orig_height / self.image_label.scaled_height
-
-            # Gösterilen koordinatları orijinal resim koordinatlarına çevir
-            orig_x = int(display_x * scale_x)
-            orig_y = int(display_y * scale_y)
-            orig_w = int(display_w * scale_x)
-            orig_h = int(display_h * scale_y)
-
-            # Sınırları kontrol et
-            orig_x = max(0, min(orig_x, self.image_label.orig_width - 1))
-            orig_y = max(0, min(orig_y, self.image_label.orig_height - 1))
-            orig_w = min(orig_w, self.image_label.orig_width - orig_x)
-            orig_h = min(orig_h, self.image_label.orig_height - orig_y)
-
-            # Kaydet
-            self.annotation_manager.add_rectangle(
-                current_image, orig_x, orig_y, orig_w, orig_h, class_id
-            )
-            print(
-                f"Dikdörtgen eklendi (orijinal): x={orig_x}, y={orig_y}, w={orig_w}, h={orig_h}, class_id={class_id}"
-            )
-            print(
-                f"Ölçekleme faktörleri: {scale_x:.3f}x, {scale_y:.3f}y, Offset: {self.image_label.offset_x}, {self.image_label.offset_y}"
-            )
-
+            self.rectangle_handler.add_rectangle(current_image, rect, class_id, self.image_info)
+    
     def update_rectangle(self, index, rect, class_id=0):
         """Mevcut bir dikdörtgeni günceller"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            
-            # Annotation manager'dan mevcut annotationları al 
-            annotations = self.annotation_manager.get_annotations(current_image)
-            
-            # İndeks kontrolü
-            if 0 <= index < len(annotations):
-                # Görüntülenen dikdörtgenin gerçek koordinatlarını al
-                # QLabel içindeki offseti çıkar
-                display_x = rect.x() - self.image_label.offset_x
-                display_y = rect.y() - self.image_label.offset_y
-                display_w = rect.width()
-                display_h = rect.height()
-
-                # Ölçekleme oranları
-                scale_x = self.image_label.orig_width / self.image_label.scaled_width
-                scale_y = self.image_label.orig_height / self.image_label.scaled_height
-
-                # Gösterilen koordinatları orijinal resim koordinatlarına çevir
-                orig_x = int(display_x * scale_x)
-                orig_y = int(display_y * scale_y)
-                orig_w = int(display_w * scale_x)
-                orig_h = int(display_h * scale_y)
-
-                # Sınırları kontrol et
-                orig_x = max(0, min(orig_x, self.image_label.orig_width - 1))
-                orig_y = max(0, min(orig_y, self.image_label.orig_height - 1))
-                orig_w = min(orig_w, self.image_label.orig_width - orig_x)
-                orig_h = min(orig_h, self.image_label.orig_height - orig_y)
-
-                # Güncelle
-                self.annotation_manager.update_rectangle(
-                    current_image, index, orig_x, orig_y, orig_w, orig_h, class_id
-                )
-                print(
-                    f"Dikdörtgen güncellendi (orijinal): x={orig_x}, y={orig_y}, w={orig_w}, h={orig_h}, class_id={class_id}"
-                )
-                print(
-                    f"Ölçekleme faktörleri: {scale_x:.3f}x, {scale_y:.3f}y, Offset: {self.image_label.offset_x}, {self.image_label.offset_y}"
-                )
-
+            self.rectangle_handler.update_rectangle(current_image, index, rect, class_id, self.image_info)
+    
     def delete_rectangle(self, index):
         """Seçili dikdörtgeni siler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            if self.annotation_manager.delete_rectangle(current_image, index):
+            if self.rectangle_handler.delete_rectangle(current_image, index):
                 print(f"Dikdörtgen silindi: indeks {index}")
+    
+    def clear_rectangles(self):
+        """Geçerli resmin dikdörtgenlerini temizler"""
+        if self.image_paths and self.current_index < len(self.image_paths):
+            current_image = self.image_paths[self.current_index]
+            self.rectangle_handler.clear_rectangles(current_image)
+            self.image_label.clearRectangles()
+
 
     def save_annotations(self, format="yolo"):
         """Tüm annotationları txt dosyalarına kaydeder"""
@@ -528,13 +461,6 @@ class MainWindow(QMainWindow):
             "Bilgi",
             f"Annotationlar {self.output_dir} klasörüne {format_name} formatında kaydedildi!",
         )
-
-    def clear_rectangles(self):
-        """Geçerli resmin dikdörtgenlerini temizler"""
-        if self.image_paths and self.current_index < len(self.image_paths):
-            current_image = self.image_paths[self.current_index]
-            self.annotation_manager.clear_rectangles(current_image)
-            self.image_label.clearRectangles()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
