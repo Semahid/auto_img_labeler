@@ -19,7 +19,7 @@ import glob
 import json
 
 from src.ui.img_label import ImageLabel
-
+from src.ui.anotation_manager import AnnotationManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -121,15 +121,13 @@ class MainWindow(QMainWindow):
 
         self.image_paths = []
         self.current_index = 0
-        self.annotations = {}  # Her resim için dikdörtgenleri saklayacak sözlük
-        self.output_dir = ""  # Annotations klasörü
 
+        # Annotation yöneticisini oluştur
+        self.annotation_manager = AnnotationManager()
+        
         # Sınıf yönetimi için değişkenler
         self.class_names = ["default"]  # En az bir sınıf olmalı
-        self.update_class_combo()
-
-        # Sınıf bilgilerini saklayacak dosya
-        self.classes_file = ""
+        self.update_class_combo() 
         # Yeni metod ekleyin
 
     def on_format_changed(self, index):
@@ -179,7 +177,8 @@ class MainWindow(QMainWindow):
         """Yeni sınıf ekler"""
         class_name, ok = QInputDialog.getText(self, "Add Class", "Class name:")
         if ok and class_name:
-            self.class_names.append(class_name)
+            self.annotation_manager.class_names.append(class_name)
+            self.class_names = self.annotation_manager.class_names
             self.update_class_combo()
             # Yeni eklenen sınıfı seç
             self.class_combo.setCurrentIndex(len(self.class_names) - 1)
@@ -210,22 +209,16 @@ class MainWindow(QMainWindow):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-        # Sınıf bilgilerini saklayacak dosyayı belirle
-        self.classes_file = os.path.join(self.output_dir, "classes.json")
-
-        # Sınıf bilgilerini yükle
-        self.load_classes()
-
         print(f"Bulunan resim sayısı: {len(self.image_paths)}")
         if self.image_paths:
             print(f"İlk resim: {self.image_paths[0]}")
-            # Annotations sözlüğünü başlat
-            self.annotations = {}
-            for img_path in self.image_paths:
-                self.annotations[img_path] = []
-
-            # Mevcut dosyalardan annotations yükleme
-            self.load_existing_annotations()
+            
+            # Annotation yöneticisini başlat
+            self.annotation_manager.initialize(self.image_paths, self.output_dir)
+            
+            # Sınıf listesini güncelle
+            self.class_names = self.annotation_manager.class_names
+            self.update_class_combo()
 
             self.current_index = 0
             self.display_image()
@@ -386,28 +379,31 @@ class MainWindow(QMainWindow):
 
             # Mevcut resmin dikdörtgenlerini göster
             self.image_label.clearRectangles()
-            if current_image in self.annotations:
-                for annotation in self.annotations[current_image]:
-                    if len(annotation) == 5:  # x, y, w, h, class_id
-                        orig_x, orig_y, orig_w, orig_h, class_id = annotation
-                    else:  # Eski format, sınıfsız
-                        orig_x, orig_y, orig_w, orig_h = annotation
-                        class_id = 0  # Varsayılan sınıf
-
-                    # Orijinal koordinatları gösterilen resim boyutlarına ölçekle
-                    # Orijinal koordinatlar -> Ölçeklenmiş koordinatlar
-                    scale_x = scaled_width / orig_width
-                    scale_y = scaled_height / orig_height
-
-                    # Önemli: Offset'i ekle
-                    x = int(orig_x * scale_x) + offset_x
-                    y = int(orig_y * scale_y) + offset_y
-                    w = int(orig_w * scale_x)
-                    h = int(orig_h * scale_y)
-
-                    rect = QRect(x, y, w, h)
-                    self.image_label.rectangles.append(rect)
-                    self.image_label.rectangle_classes.append(class_id)
+            annotations = self.annotation_manager.get_annotations(current_image)
+            print(f"Yüklenen etiket sayısı: {len(annotations)}")
+            
+            for annotation in annotations:
+                if len(annotation) == 5:  # x, y, w, h, class_id
+                    orig_x, orig_y, orig_w, orig_h, class_id = annotation
+                else:  # Eski format, sınıfsız
+                    orig_x, orig_y, orig_w, orig_h = annotation
+                    class_id = 0  # Varsayılan sınıf
+                
+                # Orijinal koordinatları gösterilen resim boyutlarına ölçekle
+                # Orijinal koordinatlar -> Ölçeklenmiş koordinatlar
+                scale_x = scaled_width / orig_width
+                scale_y = scaled_height / orig_height
+                
+                # Önemli: Offset'i ekle
+                x = int(orig_x * scale_x) + offset_x
+                y = int(orig_y * scale_y) + offset_y
+                w = int(orig_w * scale_x)
+                h = int(orig_h * scale_y)
+                
+                rect = QRect(x, y, w, h)
+                self.image_label.rectangles.append(rect)
+                self.image_label.rectangle_classes.append(class_id)
+                print(f"Etiket eklendi: x={x}, y={y}, w={w}, h={h}, class_id={class_id}")
 
             # Başlığa dosya adını ekleyelim
             self.setWindowTitle(f"Image Viewer - {os.path.basename(current_image)}")
@@ -456,8 +452,8 @@ class MainWindow(QMainWindow):
             orig_h = min(orig_h, self.image_label.orig_height - orig_y)
 
             # Kaydet
-            self.annotations[current_image].append(
-                (orig_x, orig_y, orig_w, orig_h, class_id)
+            self.annotation_manager.add_rectangle(
+                current_image, orig_x, orig_y, orig_w, orig_h, class_id
             )
             print(
                 f"Dikdörtgen eklendi (orijinal): x={orig_x}, y={orig_y}, w={orig_w}, h={orig_h}, class_id={class_id}"
@@ -470,9 +466,12 @@ class MainWindow(QMainWindow):
         """Mevcut bir dikdörtgeni günceller"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            if current_image in self.annotations and 0 <= index < len(
-                self.annotations[current_image]
-            ):
+            
+            # Annotation manager'dan mevcut annotationları al 
+            annotations = self.annotation_manager.get_annotations(current_image)
+            
+            # İndeks kontrolü
+            if 0 <= index < len(annotations):
                 # Görüntülenen dikdörtgenin gerçek koordinatlarını al
                 # QLabel içindeki offseti çıkar
                 display_x = rect.x() - self.image_label.offset_x
@@ -497,12 +496,8 @@ class MainWindow(QMainWindow):
                 orig_h = min(orig_h, self.image_label.orig_height - orig_y)
 
                 # Güncelle
-                self.annotations[current_image][index] = (
-                    orig_x,
-                    orig_y,
-                    orig_w,
-                    orig_h,
-                    class_id,
+                self.annotation_manager.update_rectangle(
+                    current_image, index, orig_x, orig_y, orig_w, orig_h, class_id
                 )
                 print(
                     f"Dikdörtgen güncellendi (orijinal): x={orig_x}, y={orig_y}, w={orig_w}, h={orig_h}, class_id={class_id}"
@@ -515,10 +510,7 @@ class MainWindow(QMainWindow):
         """Seçili dikdörtgeni siler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            if current_image in self.annotations and 0 <= index < len(
-                self.annotations[current_image]
-            ):
-                self.annotations[current_image].pop(index)
+            if self.annotation_manager.delete_rectangle(current_image, index):
                 print(f"Dikdörtgen silindi: indeks {index}")
 
     def save_annotations(self, format="yolo"):
@@ -527,84 +519,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Uyarı", "Kaydedilecek görüntü yok!")
             return
 
-        # Önce sınıfları kaydet
-        self.save_classes()
-
-        # Sonra annotationları kaydet
-        for img_path, annotations in self.annotations.items():
-            if not annotations:
-                continue
-
-            img_name = os.path.basename(img_path)
-            img_name_without_ext = os.path.splitext(img_name)[0]
-            txt_path = os.path.join(self.output_dir, f"{img_name_without_ext}.txt")
-
-            # Resim boyutlarını al (YOLO formatı için gerekli)
-            pixmap = QPixmap(img_path)
-            img_width = pixmap.width()
-            img_height = pixmap.height()
-
-            # Hata ayıklama
-            print(f"Resim boyutları: {img_width}x{img_height} - {img_path}")
-
-            with open(txt_path, "w") as f:
-                for annotation in annotations:
-                    if len(annotation) == 5:  # x, y, w, h, class_id
-                        x, y, w, h, class_id = annotation
-
-                        if format == "yolo":
-                            # YOLO format: <class_id> <x_center> <y_center> <width> <height> (normalize)
-                            # Piksel koordinatları hesapla
-                            x_center = x + w / 2
-                            y_center = y + h / 2
-
-                            # Normalize - Düzeltme yapıldı
-                            # Koordinatların resim boyutlarını geçmediğinden emin ol
-                            x_center = min(max(0, x_center), img_width)
-                            y_center = min(max(0, y_center), img_height)
-
-                            x_center_norm = x_center / img_width
-                            y_center_norm = y_center / img_height
-                            w_norm = w / img_width
-                            h_norm = h / img_height
-
-                            # Debug yazdırma
-                            print(f"Orijinal: x={x}, y={y}, w={w}, h={h}")
-                            print(f"Merkez: x_center={x_center}, y_center={y_center}")
-                            print(
-                                f"Normalize: x_norm={x_center_norm}, y_norm={y_center_norm}, w_norm={w_norm}, h_norm={h_norm}"
-                            )
-
-                            f.write(
-                                f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n"
-                            )
-                        else:
-                            # Standart format: x y w h class_id
-                            f.write(f"{x} {y} {w} {h} {class_id}\n")
-                    elif len(annotation) == 4:  # Eski format, sınıfsız
-                        x, y, w, h = annotation
-                        class_id = 0  # Varsayılan sınıf
-
-                        if format == "yolo":
-                            # YOLO format
-                            x_center = x + w / 2
-                            y_center = y + h / 2
-
-                            # Normalize - Düzeltme yapıldı
-                            x_center = min(max(0, x_center), img_width)
-                            y_center = min(max(0, y_center), img_height)
-
-                            x_center_norm = x_center / img_width
-                            y_center_norm = y_center / img_height
-                            w_norm = w / img_width
-                            h_norm = h / img_height
-
-                            f.write(
-                                f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n"
-                            )
-                        else:
-                            f.write(f"{x} {y} {w} {h} {class_id}\n")
-
+        # Annotation manager üzerinden kaydet
+        self.annotation_manager.save_annotations(format)
+        
         format_name = "YOLO" if format == "yolo" else "standart"
         QMessageBox.information(
             self,
@@ -616,7 +533,7 @@ class MainWindow(QMainWindow):
         """Geçerli resmin dikdörtgenlerini temizler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            self.annotations[current_image] = []
+            self.annotation_manager.clear_rectangles(current_image)
             self.image_label.clearRectangles()
 
     def resizeEvent(self, event):
