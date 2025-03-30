@@ -18,13 +18,15 @@ from PyQt6.QtWidgets import (
     QWidget,
     QProgressBar,
     QLineEdit,
-    QApplication
+    QApplication,
+    QGridLayout,
 )
 
-from src.ui.annotation_manager import AnnotationManager
 from src.ui.img_label import ImageLabel
 from src.ui.rectangle_handler import ImageInfo, RectangleHandler
-from src.ui.model_handler import ModelHandler
+from src.utils.model_handler import ModelHandler
+from src.utils.annotation_manager import AnnotationManager
+from src.utils.dataset_splitter import DatasetSplitter
 
 
 class MainWindow(QMainWindow):
@@ -87,7 +89,7 @@ class MainWindow(QMainWindow):
         # Model Yönetimi için bileşenler
         self.model_group = QGroupBox("Model Yönetimi")
         self.model_layout = QVBoxLayout()
-        
+
         # Model dosyası seçme
         self.model_path_layout = QHBoxLayout()
         self.model_path_label = QLabel("Model:")
@@ -95,31 +97,31 @@ class MainWindow(QMainWindow):
         self.model_path_input.setReadOnly(True)
         self.model_browse_button = QPushButton("Gözat")
         self.model_browse_button.clicked.connect(self.browse_model)
-        
+
         self.model_path_layout.addWidget(self.model_path_label)
         self.model_path_layout.addWidget(self.model_path_input)
         self.model_path_layout.addWidget(self.model_browse_button)
-        
+
         # Güven eşiği
         self.confidence_layout = QHBoxLayout()
         self.confidence_label = QLabel("Güven Eşiği:")
         self.confidence_input = QLineEdit("0.5")
         self.confidence_layout.addWidget(self.confidence_label)
         self.confidence_layout.addWidget(self.confidence_input)
-        
+
         # Model işlemleri butonları
         self.auto_label_button = QPushButton("Otomatik Etiketle")
         self.auto_label_button.clicked.connect(self.auto_label_current_image)
 
         self.process_all_simple_button = QPushButton("Basit Toplu İşlem")
         self.process_all_simple_button.clicked.connect(self.process_all_images_simple)
-        
+
         # İlerleme çubuğu
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.progress_status = QLabel("")
         self.progress_status.setVisible(False)
-        
+
         # Düzene ekle
         self.model_layout.addLayout(self.model_path_layout)
         self.model_layout.addLayout(self.confidence_layout)
@@ -127,9 +129,10 @@ class MainWindow(QMainWindow):
         self.model_layout.addWidget(self.process_all_simple_button)
         self.model_layout.addWidget(self.progress_bar)
         self.model_layout.addWidget(self.progress_status)
-        
+
         self.model_group.setLayout(self.model_layout)
 
+        self.ui_data_parser()
 
         # Ana düzen
         layout = QHBoxLayout()
@@ -144,6 +147,7 @@ class MainWindow(QMainWindow):
         button_layout.addStretch()
         button_layout.addWidget(self.class_group)
         button_layout.addWidget(self.model_group)
+        button_layout.addWidget(self.dataset_group)
 
         # MainWindow __init__ fonksiyonuna ekleyin:
         # Format seçim düğmesi
@@ -184,7 +188,7 @@ class MainWindow(QMainWindow):
 
         # Model işleyici
         self.model_handler = ModelHandler(self.annotation_manager)
-        
+
         # Batch işleme worker
         self.batch_worker = None
 
@@ -193,6 +197,55 @@ class MainWindow(QMainWindow):
 
         self.update_class_combo()
         # Yeni metod ekleyin
+
+    def ui_data_parser(self):
+        # MainWindow.__init__ metoduna ekleyin:
+        # Dataset bölümlendirme grubu
+        self.dataset_group = QGroupBox("Veri Seti Yönetimi")
+        self.dataset_layout = QVBoxLayout()
+
+        # Bölümlendirme oranları
+        self.split_layout = QGridLayout()
+
+        # Train set
+        self.train_label = QLabel("Train:")
+        self.train_input = QLineEdit("70")
+        self.train_input.setToolTip("Eğitim seti yüzde oranı (0-100)")
+        self.split_layout.addWidget(self.train_label, 0, 0)
+        self.split_layout.addWidget(self.train_input, 0, 1)
+
+        # Validation set
+        self.val_label = QLabel("Validation:")
+        self.val_input = QLineEdit("20")
+        self.val_input.setToolTip("Doğrulama seti yüzde oranı (0-100)")
+        self.split_layout.addWidget(self.val_label, 1, 0)
+        self.split_layout.addWidget(self.val_input, 1, 1)
+
+        # Test set
+        self.test_label = QLabel("Test:")
+        self.test_input = QLineEdit("10")
+        self.test_input.setToolTip("Test seti yüzde oranı (0-100)")
+        self.split_layout.addWidget(self.test_label, 2, 0)
+        self.split_layout.addWidget(self.test_input, 2, 1)
+
+        # Toplam kontrol
+        self.total_ratio_label = QLabel("Toplam: 100%")
+        self.split_layout.addWidget(self.total_ratio_label, 3, 0, 1, 2)
+
+        # Oranları kontrol etmek için event bağlantıları
+        self.train_input.textChanged.connect(self.check_split_ratios)
+        self.val_input.textChanged.connect(self.check_split_ratios)
+        self.test_input.textChanged.connect(self.check_split_ratios)
+
+        # Veri seti bölümlendirme butonları
+        self.split_data_button = QPushButton("Veri Setini Böl")
+        self.split_data_button.clicked.connect(self.split_dataset)
+
+        # Layout'a ekle
+        self.dataset_layout.addLayout(self.split_layout)
+        self.dataset_layout.addWidget(self.split_data_button)
+
+        self.dataset_group.setLayout(self.dataset_layout)
 
     def on_format_changed(self, index):
         """Format değiştiğinde çağrılır"""
@@ -438,18 +491,23 @@ class MainWindow(QMainWindow):
     def browse_model(self):
         """YOLOv8 model dosyasını seçin"""
         model_path, _ = QFileDialog.getOpenFileName(
-            self, "YOLOv8 Modelini Seç", "", "Model Dosyaları (*.pt *.pth);;Tüm Dosyalar (*)"
+            self,
+            "YOLOv8 Modelini Seç",
+            "",
+            "Model Dosyaları (*.pt *.pth);;Tüm Dosyalar (*)",
         )
         if model_path:
             self.model_path_input.setText(model_path)
             # Güven eşiğini ayarla
             try:
                 confidence = float(self.confidence_input.text())
-                self.model_handler.confidence_threshold = min(max(0.05, confidence), 1.0)
+                self.model_handler.confidence_threshold = min(
+                    max(0.05, confidence), 1.0
+                )
             except ValueError:
                 self.model_handler.confidence_threshold = 0.5
                 self.confidence_input.setText("0.5")
-            
+
             # Modeli yükle
             success, message = self.model_handler.load_model(model_path)
             if success:
@@ -463,13 +521,13 @@ class MainWindow(QMainWindow):
         if not self.model_handler.model:
             QMessageBox.warning(self, "Uyarı", "Lütfen önce bir model yükleyin.")
             return
-            
+
         if not self.image_paths or self.current_index >= len(self.image_paths):
             QMessageBox.warning(self, "Uyarı", "Etiketlenecek bir resim yok.")
             return
-            
+
         current_image = self.image_paths[self.current_index]
-        
+
         # Güven eşiğini güncelle
         try:
             confidence = float(self.confidence_input.text())
@@ -477,13 +535,13 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.model_handler.confidence_threshold = 0.5
             self.confidence_input.setText("0.5")
-            
+
         # Mevcut dikdörtgenleri temizle
         self.clear_rectangles()
-        
+
         # Nesne tespiti yap
         success, message = self.model_handler.detect_objects(current_image)
-        
+
         if success:
             # Görüntüyü güncelle
             self.display_image()
@@ -491,41 +549,40 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Uyarı", message)
 
-
     def process_all_images_simple(self):
         """Tüm resimleri basit bir şekilde otomatik etiketle"""
         if not self.model_handler.model:
             QMessageBox.warning(self, "Uyarı", "Lütfen önce bir model yükleyin.")
             return
-            
+
         if not self.image_paths:
             QMessageBox.warning(self, "Uyarı", "Açık bir klasör yok.")
             return
-        
+
         reply = QMessageBox.question(
-            self, 
-            "Toplu İşlem", 
+            self,
+            "Toplu İşlem",
             f"Tüm resimler ({len(self.image_paths)}) otomatik etiketlenecek. Devam etmek istiyor musunuz?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.No,
         )
-        
+
         if reply != QMessageBox.StandardButton.Yes:
             return
-        
+
         # İlerleme çubuğunu göster
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
         self.progress_status.setText("İşlem başlıyor...")
         self.progress_status.setVisible(True)
-        
+
         # Butonları devre dışı bırak
         self.auto_label_button.setEnabled(False)
         self.model_browse_button.setEnabled(False)
-        
+
         # Başlangıç indeksini kaydet
         original_index = self.current_index
-        
+
         # Her resim için işlem yap
         total_objects = 0
         try:
@@ -533,35 +590,39 @@ class MainWindow(QMainWindow):
                 # İlerlemeyi güncelle
                 percent = int(((i + 1) / len(self.image_paths)) * 100)
                 self.progress_bar.setValue(percent)
-                self.progress_status.setText(f"İşleniyor: {i+1}/{len(self.image_paths)} - {os.path.basename(image_path)}")
-                
+                self.progress_status.setText(
+                    f"İşleniyor: {i+1}/{len(self.image_paths)} - {os.path.basename(image_path)}"
+                )
+
                 # Geçerli görüntüyü ayarla
                 self.current_index = i
-                
+
                 # Mevcut dikdörtgenleri temizle
                 self.clear_rectangles()
-                
+
                 # Nesne tespiti yap
                 success, message = self.model_handler.detect_objects(image_path)
-                
+
                 if success:
                     # Bulunan nesnelerin sayısını al
-                    objects_count = len(self.annotation_manager.get_annotations(image_path))
+                    objects_count = len(
+                        self.annotation_manager.get_annotations(image_path)
+                    )
                     total_objects += objects_count
-                    
+
                     # İlerleme mesajını güncelle
                     self.progress_status.setText(
                         f"İşleniyor: {i+1}/{len(self.image_paths)} - {os.path.basename(image_path)} - {objects_count} nesne bulundu"
                     )
-                
+
                 # QApplication'ın olayları işlemesine izin ver
                 QApplication.processEvents()
-                
+
             # İşlem tamamlandı
             QMessageBox.information(
-                self, 
-                "Bilgi", 
-                f"İşlem tamamlandı: {len(self.image_paths)} resimde toplam {total_objects} nesne tespit edildi"
+                self,
+                "Bilgi",
+                f"İşlem tamamlandı: {len(self.image_paths)} resimde toplam {total_objects} nesne tespit edildi",
             )
         except Exception as e:
             QMessageBox.warning(self, "Hata", f"İşlem sırasında hata oluştu: {e}")
@@ -569,14 +630,110 @@ class MainWindow(QMainWindow):
             # İlerleme çubuğunu kapat
             self.progress_bar.setVisible(False)
             self.progress_status.setVisible(False)
-            
+
             # Butonları etkinleştir
             self.auto_label_button.setEnabled(True)
             self.model_browse_button.setEnabled(True)
-            
+
             # Orijinal görüntüye dön
             self.current_index = original_index
             self.display_image()
-            
+
             # Sonuçları kaydet
             self.save_annotations(self.output_format)
+
+    def check_split_ratios(self):
+        """Train, validation ve test setlerinin oranlarını kontrol eder"""
+        try:
+            train_ratio = int(self.train_input.text())
+            val_ratio = int(self.val_input.text())
+            test_ratio = int(self.test_input.text())
+
+            total = train_ratio + val_ratio + test_ratio
+
+            # Renkleri güncelle
+            if total == 100:
+                self.total_ratio_label.setText(f"Toplam: {total}% ✓")
+                self.total_ratio_label.setStyleSheet("color: green;")
+                self.split_data_button.setEnabled(True)
+            else:
+                self.total_ratio_label.setText(f"Toplam: {total}% ✗")
+                self.total_ratio_label.setStyleSheet("color: red;")
+                self.split_data_button.setEnabled(False)
+        except ValueError:
+            self.total_ratio_label.setText("Geçersiz değer!")
+            self.total_ratio_label.setStyleSheet("color: red;")
+            self.split_data_button.setEnabled(False)
+
+    def split_dataset(self):
+        """Veri setini train, validation ve test olarak böler"""
+        if not self.image_paths:
+            QMessageBox.warning(self, "Uyarı", "Açık bir klasör yok.")
+            return
+
+        try:
+            # Oranları al
+            train_ratio = int(self.train_input.text())
+            val_ratio = int(self.val_input.text())
+            test_ratio = int(self.test_input.text())
+
+            # Toplam kontrolü
+            if train_ratio + val_ratio + test_ratio != 100:
+                QMessageBox.warning(self, "Uyarı", "Oranların toplamı 100 olmalıdır!")
+                return
+
+            # Kaynak klasörü al
+            source_dir = os.path.dirname(self.image_paths[0])
+
+            # Hedef klasörü sor
+            output_dir = QFileDialog.getExistingDirectory(
+                self, "Veri Seti Çıktı Klasörünü Seçin", source_dir
+            )
+
+            if not output_dir:
+                return
+
+            # İlerleme çubuğunu göster
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            self.progress_status.setText("Veri seti bölümlendiriliyor...")
+            self.progress_status.setVisible(True)
+
+            # Butonları devre dışı bırak
+            self.split_data_button.setEnabled(False)
+
+            # Event loop'unun işlenmesi için güncelle
+            QApplication.processEvents()
+
+            # Splitter'ı oluştur ve bölümlendir
+            splitter = DatasetSplitter(source_dir, output_dir)
+            result = splitter.split_dataset(train_ratio, val_ratio, test_ratio)
+
+            # İlerleme çubuğunu güncelle
+            self.progress_bar.setValue(100)
+            self.progress_status.setText("Veri seti bölümlendirme tamamlandı!")
+
+            # Sonuçları göster
+            message = (
+                f"Veri seti başarıyla bölümlendi:\n\n"
+                f"Train: {result['train_count']} resim ({train_ratio}%)\n"
+                f"Validation: {result['val_count']} resim ({val_ratio}%)\n"
+                f"Test: {result['test_count']} resim ({test_ratio}%)\n\n"
+                f"Toplam: {result['total_count']} resim\n\n"
+                f"Veri seti klasörü: {result['dataset_dir']}\n"
+                f"data.yaml: {result['yaml_path']}"
+            )
+
+            QMessageBox.information(self, "Veri Seti Bölümlendirme", message)
+
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Hata", f"Veri seti bölümlendirme sırasında hata: {str(e)}"
+            )
+        finally:
+            # İlerleme çubuğunu kapat
+            self.progress_bar.setVisible(False)
+            self.progress_status.setVisible(False)
+
+            # Butonları etkinleştir
+            self.split_data_button.setEnabled(True)

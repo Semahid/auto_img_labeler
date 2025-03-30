@@ -1,7 +1,6 @@
 import os
 import json
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QMessageBox
 
 
 class AnnotationManager:
@@ -163,83 +162,91 @@ class AnnotationManager:
         if not self.annotations:
             print("Kaydedilecek annotation yok!")
             return
-        
+
         # Önce sınıfları kaydet
         self.save_classes()
-        
+
         # Annotations sayacı
         saved_count = 0
-        
+
         # Sonra annotationları kaydet
         for img_path, annotations in self.annotations.items():
             if not annotations:
                 continue
-                
+
             img_name = os.path.basename(img_path)
             img_name_without_ext = os.path.splitext(img_name)[0]
             txt_path = os.path.join(self.output_dir, f"{img_name_without_ext}.txt")
-            
+
             # Resim boyutlarını al (YOLO formatı için gerekli)
             pixmap = QPixmap(img_path)
             img_width = pixmap.width()
             img_height = pixmap.height()
-            
+
             # Hata ayıklama
             print(f"Resim boyutları: {img_width}x{img_height} - {img_path}")
-            
+
             with open(txt_path, "w") as f:
                 for annotation in annotations:
                     if len(annotation) == 5:  # x, y, w, h, class_id
                         x, y, w, h, class_id = annotation
-                        
+
                         if format == "yolo":
                             # YOLO format: <class_id> <x_center> <y_center> <width> <height> (normalize edilmiş)
                             # Piksel koordinatları hesapla
                             x_center = x + w / 2
                             y_center = y + h / 2
-                            
+
                             # Normalize - koordinatların resim sınırlarını aşmadığını kontrol et
                             x_center = min(max(0, x_center), img_width)
                             y_center = min(max(0, y_center), img_height)
-                            
+
                             x_center_norm = x_center / img_width
                             y_center_norm = y_center / img_height
                             w_norm = w / img_width
                             h_norm = h / img_height
-                            
+
                             # Debug yazdırma
                             print(f"Orijinal: x={x}, y={y}, w={w}, h={h}")
                             print(f"Merkez: x_center={x_center}, y_center={y_center}")
-                            print(f"Normalize: x_norm={x_center_norm}, y_norm={y_center_norm}, w_norm={w_norm}, h_norm={h_norm}")
-                            
-                            f.write(f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n")
+                            print(
+                                f"Normalize: x_norm={x_center_norm}, y_norm={y_center_norm}, w_norm={w_norm}, h_norm={h_norm}"
+                            )
+
+                            f.write(
+                                f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n"
+                            )
                         else:
                             # Standart format: x y w h class_id
                             f.write(f"{x} {y} {w} {h} {class_id}\n")
                     elif len(annotation) == 4:  # Eski format, sınıfsız
                         x, y, w, h = annotation
                         class_id = 0  # Varsayılan sınıf
-                        
+
                         if format == "yolo":
                             # YOLO format
                             x_center = x + w / 2
                             y_center = y + h / 2
-                            
+
                             # Normalize
                             x_center = min(max(0, x_center), img_width)
                             y_center = min(max(0, y_center), img_height)
-                            
+
                             x_center_norm = x_center / img_width
                             y_center_norm = y_center / img_height
                             w_norm = w / img_width
                             h_norm = h / img_height
-                            
-                            f.write(f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n")
+
+                            f.write(
+                                f"{class_id} {x_center_norm:.6f} {y_center_norm:.6f} {w_norm:.6f} {h_norm:.6f}\n"
+                            )
                         else:
                             f.write(f"{x} {y} {w} {h} {class_id}\n")
-                
+
                 saved_count += 1
-        
+
         format_name = "YOLO" if format == "yolo" else "standart"
-        print(f"{saved_count} resim için annotationlar {self.output_dir} klasörüne {format_name} formatında kaydedildi.")
+        print(
+            f"{saved_count} resim için annotationlar {self.output_dir} klasörüne {format_name} formatında kaydedildi."
+        )
         return True
