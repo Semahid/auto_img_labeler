@@ -1,26 +1,27 @@
-from PyQt6.QtWidgets import (
-    QMainWindow,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QFileDialog,
-    QSizePolicy,
-    QMessageBox,
-    QComboBox,
-    QInputDialog,
-    QGroupBox,
-)
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, QRect
-import os
 import glob
-import json
+import os
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from src.ui.annotation_manager import AnnotationManager
 from src.ui.img_label import ImageLabel
-from src.ui.anotation_manager import AnnotationManager
-from src.ui.rectangle_handler import RectangleHandler, ImageInfo
+from src.ui.rectangle_handler import ImageInfo, RectangleHandler
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -128,13 +129,11 @@ class MainWindow(QMainWindow):
 
         # Dikdörtgen işleyicisini oluştur
         self.rectangle_handler = RectangleHandler(self.annotation_manager)
-        
+
         # Resim bilgisi nesnesi
         self.image_info = ImageInfo()
-        
-        # Sınıf yönetimi için değişkenler
-        self.class_names = ["default"]  # En az bir sınıf olmalı
-        self.update_class_combo() 
+
+        self.update_class_combo()
         # Yeni metod ekleyin
 
     def on_format_changed(self, index):
@@ -156,7 +155,7 @@ class MainWindow(QMainWindow):
     def update_class_combo(self):
         """Sınıf combobox'ını günceller"""
         self.class_combo.clear()
-        for class_name in self.class_names:
+        for class_name in self.annotation_manager.class_names:
             self.class_combo.addItem(class_name)
 
     def get_selected_class_id(self):
@@ -165,13 +164,13 @@ class MainWindow(QMainWindow):
 
     def get_class_name(self, class_id):
         """Sınıf ID'sine göre sınıf adını döndürür"""
-        if 0 <= class_id < len(self.class_names):
-            return self.class_names[class_id]
+        if 0 <= class_id < len(self.annotation_manager.class_names):
+            return self.annotation_manager.class_names[class_id]
         return "unknown"
 
     def show_selected_class(self, class_id):
         """Verilen sınıfı combo box'ta seçer"""
-        if 0 <= class_id < len(self.class_names):
+        if 0 <= class_id < len(self.annotation_manager.class_names):
             self.class_combo.setCurrentIndex(class_id)
 
     def on_class_selected(self, index):
@@ -185,10 +184,11 @@ class MainWindow(QMainWindow):
         class_name, ok = QInputDialog.getText(self, "Add Class", "Class name:")
         if ok and class_name:
             self.annotation_manager.class_names.append(class_name)
-            self.class_names = self.annotation_manager.class_names
             self.update_class_combo()
             # Yeni eklenen sınıfı seç
-            self.class_combo.setCurrentIndex(len(self.class_names) - 1)
+            self.class_combo.setCurrentIndex(
+                len(self.annotation_manager.class_names) - 1
+            )
 
     def set_class_to_selected(self):
         """Seçili dikdörtgenin sınıfını değiştirir"""
@@ -219,12 +219,11 @@ class MainWindow(QMainWindow):
         print(f"Bulunan resim sayısı: {len(self.image_paths)}")
         if self.image_paths:
             print(f"İlk resim: {self.image_paths[0]}")
-            
+
             # Annotation yöneticisini başlat
             self.annotation_manager.initialize(self.image_paths, self.output_dir)
-            
+
             # Sınıf listesini güncelle
-            self.class_names = self.annotation_manager.class_names
             self.update_class_combo()
 
             self.current_index = 0
@@ -276,7 +275,7 @@ class MainWindow(QMainWindow):
             self.image_info.update(
                 orig_width, orig_height, scaled_width, scaled_height, offset_x, offset_y
             )
-            
+
             # ImageLabel'a da bildir (geriye uyumluluk için)
             self.image_label.offset_x = offset_x
             self.image_label.offset_y = offset_y
@@ -295,12 +294,14 @@ class MainWindow(QMainWindow):
 
             # Mevcut resmin dikdörtgenlerini göster
             self.image_label.clearRectangles()
-            
+
             # RectangleHandler'ı kullanarak dikdörtgenleri al
-            display_rects, class_ids = self.rectangle_handler.get_rectangles_for_display(
-                current_image, self.image_info
+            display_rects, class_ids = (
+                self.rectangle_handler.get_rectangles_for_display(
+                    current_image, self.image_info
+                )
             )
-            
+
             # Dikdörtgenleri ImageLabel'a ekle
             for i, rect in enumerate(display_rects):
                 self.image_label.rectangles.append(rect)
@@ -329,28 +330,31 @@ class MainWindow(QMainWindow):
         """Geçerli resme çizilen dikdörtgeni annotations sözlüğüne ekler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            self.rectangle_handler.add_rectangle(current_image, rect, class_id, self.image_info)
-    
+            self.rectangle_handler.add_rectangle(
+                current_image, rect, class_id, self.image_info
+            )
+
     def update_rectangle(self, index, rect, class_id=0):
         """Mevcut bir dikdörtgeni günceller"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
-            self.rectangle_handler.update_rectangle(current_image, index, rect, class_id, self.image_info)
-    
+            self.rectangle_handler.update_rectangle(
+                current_image, index, rect, class_id, self.image_info
+            )
+
     def delete_rectangle(self, index):
         """Seçili dikdörtgeni siler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
             if self.rectangle_handler.delete_rectangle(current_image, index):
                 print(f"Dikdörtgen silindi: indeks {index}")
-    
+
     def clear_rectangles(self):
         """Geçerli resmin dikdörtgenlerini temizler"""
         if self.image_paths and self.current_index < len(self.image_paths):
             current_image = self.image_paths[self.current_index]
             self.rectangle_handler.clear_rectangles(current_image)
             self.image_label.clearRectangles()
-
 
     def save_annotations(self, format="yolo"):
         """Tüm annotationları txt dosyalarına kaydeder"""
@@ -360,7 +364,7 @@ class MainWindow(QMainWindow):
 
         # Annotation manager üzerinden kaydet
         self.annotation_manager.save_annotations(format)
-        
+
         format_name = "YOLO" if format == "yolo" else "standart"
         QMessageBox.information(
             self,
