@@ -16,11 +16,15 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QProgressBar,
+    QLineEdit,
+    QApplication
 )
 
 from src.ui.annotation_manager import AnnotationManager
 from src.ui.img_label import ImageLabel
 from src.ui.rectangle_handler import ImageInfo, RectangleHandler
+from src.ui.model_handler import ModelHandler
 
 
 class MainWindow(QMainWindow):
@@ -80,6 +84,53 @@ class MainWindow(QMainWindow):
         self.clear_button = QPushButton("Clear Rectangles", self)
         self.clear_button.clicked.connect(self.clear_rectangles)
 
+        # Model Yönetimi için bileşenler
+        self.model_group = QGroupBox("Model Yönetimi")
+        self.model_layout = QVBoxLayout()
+        
+        # Model dosyası seçme
+        self.model_path_layout = QHBoxLayout()
+        self.model_path_label = QLabel("Model:")
+        self.model_path_input = QLineEdit()
+        self.model_path_input.setReadOnly(True)
+        self.model_browse_button = QPushButton("Gözat")
+        self.model_browse_button.clicked.connect(self.browse_model)
+        
+        self.model_path_layout.addWidget(self.model_path_label)
+        self.model_path_layout.addWidget(self.model_path_input)
+        self.model_path_layout.addWidget(self.model_browse_button)
+        
+        # Güven eşiği
+        self.confidence_layout = QHBoxLayout()
+        self.confidence_label = QLabel("Güven Eşiği:")
+        self.confidence_input = QLineEdit("0.5")
+        self.confidence_layout.addWidget(self.confidence_label)
+        self.confidence_layout.addWidget(self.confidence_input)
+        
+        # Model işlemleri butonları
+        self.auto_label_button = QPushButton("Otomatik Etiketle")
+        self.auto_label_button.clicked.connect(self.auto_label_current_image)
+
+        self.process_all_simple_button = QPushButton("Basit Toplu İşlem")
+        self.process_all_simple_button.clicked.connect(self.process_all_images_simple)
+        
+        # İlerleme çubuğu
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_status = QLabel("")
+        self.progress_status.setVisible(False)
+        
+        # Düzene ekle
+        self.model_layout.addLayout(self.model_path_layout)
+        self.model_layout.addLayout(self.confidence_layout)
+        self.model_layout.addWidget(self.auto_label_button)
+        self.model_layout.addWidget(self.process_all_simple_button)
+        self.model_layout.addWidget(self.progress_bar)
+        self.model_layout.addWidget(self.progress_status)
+        
+        self.model_group.setLayout(self.model_layout)
+
+
         # Ana düzen
         layout = QHBoxLayout()
 
@@ -92,6 +143,7 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.clear_button)
         button_layout.addStretch()
         button_layout.addWidget(self.class_group)
+        button_layout.addWidget(self.model_group)
 
         # MainWindow __init__ fonksiyonuna ekleyin:
         # Format seçim düğmesi
@@ -129,6 +181,12 @@ class MainWindow(QMainWindow):
 
         # Dikdörtgen işleyicisini oluştur
         self.rectangle_handler = RectangleHandler(self.annotation_manager)
+
+        # Model işleyici
+        self.model_handler = ModelHandler(self.annotation_manager)
+        
+        # Batch işleme worker
+        self.batch_worker = None
 
         # Resim bilgisi nesnesi
         self.image_info = ImageInfo()
@@ -376,3 +434,149 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "image_paths") and self.image_paths:
             self.display_image()
+
+    def browse_model(self):
+        """YOLOv8 model dosyasını seçin"""
+        model_path, _ = QFileDialog.getOpenFileName(
+            self, "YOLOv8 Modelini Seç", "", "Model Dosyaları (*.pt *.pth);;Tüm Dosyalar (*)"
+        )
+        if model_path:
+            self.model_path_input.setText(model_path)
+            # Güven eşiğini ayarla
+            try:
+                confidence = float(self.confidence_input.text())
+                self.model_handler.confidence_threshold = min(max(0.05, confidence), 1.0)
+            except ValueError:
+                self.model_handler.confidence_threshold = 0.5
+                self.confidence_input.setText("0.5")
+            
+            # Modeli yükle
+            success, message = self.model_handler.load_model(model_path)
+            if success:
+                QMessageBox.information(self, "Bilgi", message)
+                self.update_class_combo()
+            else:
+                QMessageBox.warning(self, "Uyarı", message)
+
+    def auto_label_current_image(self):
+        """Mevcut resmi otomatik etiketle"""
+        if not self.model_handler.model:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce bir model yükleyin.")
+            return
+            
+        if not self.image_paths or self.current_index >= len(self.image_paths):
+            QMessageBox.warning(self, "Uyarı", "Etiketlenecek bir resim yok.")
+            return
+            
+        current_image = self.image_paths[self.current_index]
+        
+        # Güven eşiğini güncelle
+        try:
+            confidence = float(self.confidence_input.text())
+            self.model_handler.confidence_threshold = min(max(0.05, confidence), 1.0)
+        except ValueError:
+            self.model_handler.confidence_threshold = 0.5
+            self.confidence_input.setText("0.5")
+            
+        # Mevcut dikdörtgenleri temizle
+        self.clear_rectangles()
+        
+        # Nesne tespiti yap
+        success, message = self.model_handler.detect_objects(current_image)
+        
+        if success:
+            # Görüntüyü güncelle
+            self.display_image()
+            QMessageBox.information(self, "Bilgi", message)
+        else:
+            QMessageBox.warning(self, "Uyarı", message)
+
+
+    def process_all_images_simple(self):
+        """Tüm resimleri basit bir şekilde otomatik etiketle"""
+        if not self.model_handler.model:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce bir model yükleyin.")
+            return
+            
+        if not self.image_paths:
+            QMessageBox.warning(self, "Uyarı", "Açık bir klasör yok.")
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Toplu İşlem", 
+            f"Tüm resimler ({len(self.image_paths)}) otomatik etiketlenecek. Devam etmek istiyor musunuz?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # İlerleme çubuğunu göster
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.progress_status.setText("İşlem başlıyor...")
+        self.progress_status.setVisible(True)
+        
+        # Butonları devre dışı bırak
+        self.auto_label_button.setEnabled(False)
+        self.model_browse_button.setEnabled(False)
+        
+        # Başlangıç indeksini kaydet
+        original_index = self.current_index
+        
+        # Her resim için işlem yap
+        total_objects = 0
+        try:
+            for i, image_path in enumerate(self.image_paths):
+                # İlerlemeyi güncelle
+                percent = int(((i + 1) / len(self.image_paths)) * 100)
+                self.progress_bar.setValue(percent)
+                self.progress_status.setText(f"İşleniyor: {i+1}/{len(self.image_paths)} - {os.path.basename(image_path)}")
+                
+                # Geçerli görüntüyü ayarla
+                self.current_index = i
+                
+                # Mevcut dikdörtgenleri temizle
+                self.clear_rectangles()
+                
+                # Nesne tespiti yap
+                success, message = self.model_handler.detect_objects(image_path)
+                
+                if success:
+                    # Bulunan nesnelerin sayısını al
+                    objects_count = len(self.annotation_manager.get_annotations(image_path))
+                    total_objects += objects_count
+                    
+                    # İlerleme mesajını güncelle
+                    self.progress_status.setText(
+                        f"İşleniyor: {i+1}/{len(self.image_paths)} - {os.path.basename(image_path)} - {objects_count} nesne bulundu"
+                    )
+                
+                # QApplication'ın olayları işlemesine izin ver
+                QApplication.processEvents()
+                
+            # İşlem tamamlandı
+            QMessageBox.information(
+                self, 
+                "Bilgi", 
+                f"İşlem tamamlandı: {len(self.image_paths)} resimde toplam {total_objects} nesne tespit edildi"
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Hata", f"İşlem sırasında hata oluştu: {e}")
+        finally:
+            # İlerleme çubuğunu kapat
+            self.progress_bar.setVisible(False)
+            self.progress_status.setVisible(False)
+            
+            # Butonları etkinleştir
+            self.auto_label_button.setEnabled(True)
+            self.model_browse_button.setEnabled(True)
+            
+            # Orijinal görüntüye dön
+            self.current_index = original_index
+            self.display_image()
+            
+            # Sonuçları kaydet
+            self.save_annotations(self.output_format)
