@@ -2,7 +2,7 @@ import os
 import shutil
 import random
 from pathlib import Path
-
+import zipfile
 
 class DatasetSplitter:
     """YOLO veri setini train, validation ve test olarak böler"""
@@ -114,6 +114,12 @@ class DatasetSplitter:
         else:
             yaml_path = None
 
+        # Dataset klasörünü zip dosyası olarak sıkıştır
+        zip_path = None
+        zip_path = os.path.join(self.output_dir, "dataset.zip")
+        self._create_zip_file(dataset_dir, zip_path)
+
+
         # Sonuçları döndür
         return {
             "train_count": len(train_files),
@@ -122,6 +128,8 @@ class DatasetSplitter:
             "total_count": len(image_files),
             "dataset_dir": dataset_dir,
             "yaml_path": yaml_path,
+            "zip_path": zip_path,
+
         }
 
     def _copy_files(self, files, img_dir, label_dir):
@@ -198,3 +206,27 @@ names:
     def _create_yaml_file(self, dataset_dir):
         """create_yaml_file metodunu split_dataset içinden çağırır"""
         return self.create_yaml_file(dataset_dir)
+    
+
+    def _create_zip_file(self, source_dir, zip_path):
+        """Dataset klasörünü zip dosyası olarak sıkıştırır"""
+        try:
+            # Eğer önceki zip dosyası varsa sil
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+                
+            # Zip dosyasını oluştur
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Kaynak klasörü dolaş ve tüm dosyaları zip dosyasına ekle
+                for root, _, files in os.walk(source_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Zip içindeki göreceli yolu hesapla
+                        arcname = os.path.relpath(file_path, os.path.dirname(source_dir))
+                        zipf.write(file_path, arcname)
+            
+            print(f"Zip dosyası oluşturuldu: {zip_path}")
+            return True
+        except Exception as e:
+            print(f"Zip dosyası oluşturulurken hata: {e}")
+            return False

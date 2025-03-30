@@ -721,7 +721,8 @@ class MainWindow(QMainWindow):
                 f"Test: {result['test_count']} resim ({test_ratio}%)\n\n"
                 f"Toplam: {result['total_count']} resim\n\n"
                 f"Veri seti klasörü: {result['dataset_dir']}\n"
-                f"data.yaml: {result['yaml_path']}"
+                f"data.yaml: {result['yaml_path']}\n"
+                f"zip dosyası: {result['zip_path']}"
             )
 
             QMessageBox.information(self, "Veri Seti Bölümlendirme", message)
