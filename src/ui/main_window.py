@@ -32,7 +32,7 @@ from src.utils.dataset_splitter import DatasetSplitter
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Image Annotation Tool")
+        self.setWindowTitle("Auto Image Labeler")
         self.setGeometry(100, 100, 1000, 600)
 
         # Değiştirildi: QLabel yerine özel ImageLabel sınıfını kullanıyoruz
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
         self.clear_button.clicked.connect(self.clear_rectangles)
 
         # Model Yönetimi için bileşenler
-        self.model_group = QGroupBox("Model Yönetimi")
+        self.model_group = QGroupBox("Model Management")
         self.model_layout = QVBoxLayout()
 
         # Model dosyası seçme
@@ -95,7 +95,7 @@ class MainWindow(QMainWindow):
         self.model_path_label = QLabel("Model:")
         self.model_path_input = QLineEdit()
         self.model_path_input.setReadOnly(True)
-        self.model_browse_button = QPushButton("Gözat")
+        self.model_browse_button = QPushButton("Open model")
         self.model_browse_button.clicked.connect(self.browse_model)
 
         self.model_path_layout.addWidget(self.model_path_label)
@@ -104,16 +104,16 @@ class MainWindow(QMainWindow):
 
         # Güven eşiği
         self.confidence_layout = QHBoxLayout()
-        self.confidence_label = QLabel("Güven Eşiği:")
+        self.confidence_label = QLabel("Confidence threshold:")
         self.confidence_input = QLineEdit("0.5")
         self.confidence_layout.addWidget(self.confidence_label)
         self.confidence_layout.addWidget(self.confidence_input)
 
         # Model işlemleri butonları
-        self.auto_label_button = QPushButton("Otomatik Etiketle")
+        self.auto_label_button = QPushButton("Auto Label Current Image")
         self.auto_label_button.clicked.connect(self.auto_label_current_image)
 
-        self.process_all_simple_button = QPushButton("Basit Toplu İşlem")
+        self.process_all_simple_button = QPushButton("Simple Auto Label All Images")
         self.process_all_simple_button.clicked.connect(self.process_all_images_simple)
 
         # İlerleme çubuğu
@@ -201,7 +201,7 @@ class MainWindow(QMainWindow):
     def ui_data_parser(self):
         # MainWindow.__init__ metoduna ekleyin:
         # Dataset bölümlendirme grubu
-        self.dataset_group = QGroupBox("Veri Seti Yönetimi")
+        self.dataset_group = QGroupBox("Dataset Splitter")
         self.dataset_layout = QVBoxLayout()
 
         # Bölümlendirme oranları
@@ -210,26 +210,26 @@ class MainWindow(QMainWindow):
         # Train set
         self.train_label = QLabel("Train:")
         self.train_input = QLineEdit("70")
-        self.train_input.setToolTip("Eğitim seti yüzde oranı (0-100)")
+        self.train_input.setToolTip("Train set percent (0-100)")
         self.split_layout.addWidget(self.train_label, 0, 0)
         self.split_layout.addWidget(self.train_input, 0, 1)
 
         # Validation set
         self.val_label = QLabel("Validation:")
         self.val_input = QLineEdit("20")
-        self.val_input.setToolTip("Doğrulama seti yüzde oranı (0-100)")
+        self.val_input.setToolTip("Validation set percent (0-100)")
         self.split_layout.addWidget(self.val_label, 1, 0)
         self.split_layout.addWidget(self.val_input, 1, 1)
 
         # Test set
         self.test_label = QLabel("Test:")
         self.test_input = QLineEdit("10")
-        self.test_input.setToolTip("Test seti yüzde oranı (0-100)")
+        self.test_input.setToolTip("Test set percent (0-100)")
         self.split_layout.addWidget(self.test_label, 2, 0)
         self.split_layout.addWidget(self.test_input, 2, 1)
 
         # Toplam kontrol
-        self.total_ratio_label = QLabel("Toplam: 100%")
+        self.total_ratio_label = QLabel("Top: 100%")
         self.split_layout.addWidget(self.total_ratio_label, 3, 0, 1, 2)
 
         # Oranları kontrol etmek için event bağlantıları
@@ -238,7 +238,7 @@ class MainWindow(QMainWindow):
         self.test_input.textChanged.connect(self.check_split_ratios)
 
         # Veri seti bölümlendirme butonları
-        self.split_data_button = QPushButton("Veri Setini Böl")
+        self.split_data_button = QPushButton("Split Dataset")
         self.split_data_button.clicked.connect(self.split_dataset)
 
         # Layout'a ekle
@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
                 print(f"Etiket eklendi: {rect}, class_id={class_ids[i]}")
 
             # Başlığa dosya adını ekleyelim
-            self.setWindowTitle(f"Image Viewer - {os.path.basename(current_image)}")
+            self.setWindowTitle(f"Auto Image Labeler - {os.path.basename(current_image)}")
 
     def show_next_image(self):
         if self.image_paths:

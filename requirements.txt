@@ -1,0 +1,22 @@
+# UI Kütüphaneleri
+PyQt6>=6.0.0
+
+# YOLOv8 ve Görüntü İşleme
+ultralytics>=8.0.0
+opencv-python>=4.5.0
+Pillow>=9.0.0
+
+# Temel Kütüphaneler
+numpy>=1.20.0
+matplotlib>=3.5.0
+
+# PyTorch (GPU desteği isteğe bağlı)
+torch>=1.7.0
+torchvision>=0.8.0
+
+# Veri İşleme ve Dosya Formatları
+PyYAML>=6.0.0
+tqdm>=4.64.0
+
+# Dağıtım için (opsiyonel)
+# pyinstaller>=5.7.0
