@@ -1,107 +1,109 @@
-# Auto Image Labeler - Kullanım Kılavuzu
+[TR](README_tr.md) - [EN](README.md)
 
-Auto Image Labeler, görüntülerde nesne tespiti yapan, etiketleme işlemlerini kolaylaştıran ve YOLO formatında veri setleri oluşturmaya yardımcı olan bir uygulamadır.
+# Auto Image Labeler - User Guide
 
-## İçindekiler
+Auto Image Labeler is an application that performs object detection on images, simplifies labeling processes, and helps create datasets in YOLO format.
 
-- [Kurulum](#kurulum)
-- [Ana Ekran](#ana-ekran)
-- [Görüntü Yükleme ve Gezinme](#görüntü-yükleme-ve-gezinme)
-- [Manuel Etiketleme](#manuel-etiketleme)
-- [Otomatik Etiketleme](#otomatik-etiketleme)
-- [Etiketleri Kaydetme](#etiketleri-kaydetme)
-- [Veri Setini Bölümleme](#veri-setini-bölümleme)
+## Table of Contents
 
-## Kurulum
+- [Installation](#installation)
+- [Main Screen](#main-screen)
+- [Image Loading and Navigation](#image-loading-and-navigation)
+- [Manual Labeling](#manual-labeling)
+- [Automatic Labeling](#automatic-labeling)
+- [Saving Annotations](#saving-annotations)
+- [Dataset Splitting](#dataset-splitting)
 
-1. Gerekli bağımlılıkları yükleyin:
+## Installation
+
+1. Install required dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. Uygulamayı başlatın:
+2. Launch the application:
    ```bash
    python main.py
    ```
 
-## Ana Ekran
+## Main Screen
 
-Uygulama aşağıdaki bölümlerden oluşmaktadır:
+The application consists of the following sections:
 
-- **Görüntü Alanı**: Resimleri görüntülemek ve etiketlemek için kullanılan ana alan.
-- **Kontrol Paneli**: Sağ tarafta bulunan kontrol butonları ve ayarlar.
-  - Navigasyon Butonları (Önceki/Sonraki)
-  - Klasör Açma
-  - Etiketleri Kaydetme
-  - Etiketleri Temizleme
-  - Sınıf Yönetimi
-  - Model Yönetimi
-  - Veri Seti Yönetimi
-  - Format Seçimi
+- **Image Area**: Main area used for viewing and labeling images.
+- **Control Panel**: Control buttons and settings located on the right side.
+  - Navigation Buttons (Previous/Next)
+  - Open Folder
+  - Save Annotations
+  - Clear Annotations
+  - Class Management
+  - Model Management
+  - Dataset Management
+  - Format Selection
 
-## Görüntü Yükleme ve Gezinme
+## Image Loading and Navigation
 
-1. **Klasör Açma**: "Open Folder" butonuna tıklayarak resim dosyalarını içeren bir klasör seçin.
-2. **Resimler Arası Gezinme**: 
-   - "Next" ve "Previous" butonlarını kullanarak resimler arasında geçiş yapabilirsiniz.
-   - Alternatif olarak sağ/sol ok tuşlarını kullanabilirsiniz.
+1. **Open Folder**: Click the "Open Folder" button to select a folder containing image files.
+2. **Navigate Between Images**: 
+   - Use "Next" and "Previous" buttons to navigate between images.
+   - Alternatively, use right/left arrow keys.
 
-## Manuel Etiketleme
+## Manual Labeling
 
-1. **Dikdörtgen Çizme**: 
-   - Görüntü üzerinde fare ile tıklayıp sürükleyerek yeni bir dikdörtgen çizin.
-   - Minimum 5x5 piksel boyutunda olmalıdır.
+1. **Drawing Rectangles**: 
+   - Click and drag with the mouse on the image to draw a new rectangle.
+   - Must be at least 5x5 pixels in size.
 
-2. **Dikdörtgen Düzenleme**:
-   - Mevcut bir dikdörtgene tıklayarak seçin.
-   - Seçili dikdörtgeni fare ile sürükleyerek taşıyabilirsiniz.
-   - Kenarlar ve köşelerden tutarak yeniden boyutlandırabilirsiniz.
-   - DELETE tuşu ile seçili dikdörtgeni silebilirsiniz.
+2. **Editing Rectangles**:
+   - Click on an existing rectangle to select it.
+   - Drag the selected rectangle with the mouse to move it.
+   - Resize by dragging from edges and corners.
+   - Delete the selected rectangle with the DELETE key.
 
-3. **Sınıf Yönetimi**:
-   - "Classes" bölümünden mevcut bir sınıf seçin.
-   - "Add Class" butonu ile yeni sınıflar ekleyebilirsiniz.
-   - "Set Class to Selected" butonu ile seçili dikdörtgenin sınıfını değiştirebilirsiniz.
+3. **Class Management**:
+   - Select an existing class from the "Classes" section.
+   - Add new classes with the "Add Class" button.
+   - Change the class of the selected rectangle with the "Set Class to Selected" button.
 
-## Otomatik Etiketleme
+## Automatic Labeling
 
-1. **Model Yükleme**:
-   - "Model Management" bölümünden "Open folder" butonuna tıklayarak bir YOLOv8 modeli (.pt) seçin.
-   - Güven eşiğini ayarlayın (varsayılan: 0.5).
+1. **Loading Model**:
+   - Click "Open folder" button in the "Model Management" section to select a YOLOv8 model (.pt).
+   - Adjust the confidence threshold (default: 0.5).
 
-2. **Etiketleme**:
-   - **Tek Resim**: "Auto label current image" butonuna tıklayarak görüntülenen resim için otomatik nesne tespiti yapın.
-   - **Toplu İşlem**: "Simple Auto label all image" butonu ile klasördeki tüm resimleri otomatik olarak etiketleyin.
+2. **Labeling**:
+   - **Single Image**: Click "Auto label current image" button to perform automatic object detection on the displayed image.
+   - **Batch Processing**: Use "Simple Auto label all image" button to automatically label all images in the folder.
 
-## Etiketleri Kaydetme
+## Saving Annotations
 
-1. **Format Seçimi**:
-   - "Output Format" bölümünden istediğiniz formatı seçin:
-     - YOLO Format (sınıf_id, x_merkez, y_merkez, genişlik, yükseklik) - normalize edilmiş
-     - Standard Format (x, y, genişlik, yükseklik, sınıf_id) - piksel değerleri
+1. **Format Selection**:
+   - Select your desired format from the "Output Format" section:
+     - YOLO Format (class_id, x_center, y_center, width, height) - normalized
+     - Standard Format (x, y, width, height, class_id) - pixel values
 
-2. **Kaydetme**:
-   - "Save Annotations" butonuna tıklayarak etiketleri kaydedin.
-   - Etiketler, görüntülerin bulunduğu klasörde "annotations" adlı bir alt klasöre kaydedilir.
-   - Sınıf bilgileri "classes.json" dosyasında saklanır.
+2. **Saving**:
+   - Click "Save Annotations" button to save the annotations.
+   - Annotations are saved to a subfolder named "annotations" in the folder containing the images.
+   - Class information is stored in "classes.json" file.
 
-## Veri Setini Bölümleme
+## Dataset Splitting
 
-YOLO eğitimi için veri setinizi train, validation ve test olarak bölebilirsiniz:
+You can split your dataset into train, validation, and test sets for YOLO training:
 
-1. **Oranları Ayarlama**:
-   - "Data splitter" bölümünden train, validation ve test için yüzde oranlarını belirleyin.
-   - Oranların toplamı 100 olmalıdır.
+1. **Setting Ratios**:
+   - Set percentage ratios for train, validation, and test from the "Data splitter" section.
+   - The sum of ratios must equal 100.
 
-2. **Bölümlendirme**:
-   - "Split dataset" butonuna tıklayın.
-   - Çıktı klasörünü seçin.
-   - İşlem tamamlandığında otomatik olarak:
-     - Train, validation ve test alt klasörleri oluşturulur.
-     - data.yaml dosyası oluşturulur.
-     - Tüm veri seti bir zip dosyası olarak paketlenir.
+2. **Splitting**:
+   - Click the "Split dataset" button.
+   - Select the output folder.
+   - When the process is complete, it automatically:
+     - Creates train, validation, and test subfolders.
+     - Creates data.yaml file.
+     - Packages the entire dataset as a zip file.
 
-## Kısayollar
+## Shortcuts
 
-- **Sağ/Sol Ok**: Sonraki/önceki görüntüye geçiş
-- **DELETE**: Seçili dikdörtgeni sil
+- **Right/Left Arrow**: Navigate to next/previous image
+- **DELETE**: Delete selected
